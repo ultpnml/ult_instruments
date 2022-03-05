@@ -46,19 +46,19 @@ class keithley2400:
                 if abs(num - voltage) < 1.1*increment:
                     self.force_set_voltage(num)
                     print('VOLTAGE: ' + str(self.force_read_voltage()) + ' V')
-                    print('CURRENT: ' + str(self.force_read_current()) + 'uA')
+                    print('CURRENT: ' + str(self.force_read_current()) + ' uA')
                     print('DONE')
                     self.keithley.write(':SYST:KEY 23\n')
                     loop_flag = 0
                 elif voltage > num:
                     self.force_set_voltage(voltage - increment)
                     print('VOLTAGE: ' + str(self.force_read_voltage()) + ' V')
-                    print('CURRENT: ' + str(self.force_read_current()) + 'uA')
+                    print('CURRENT: ' + str(self.force_read_current()) + ' uA')
                     time.sleep(0.01)
                 elif voltage < num:
                     self.force_set_voltage(voltage + increment)
                     print('VOLTAGE: ' + str(self.force_read_voltage()) + ' V')
-                    print('CURRENT: ' + str(self.force_read_current()) + ' V')
+                    print('CURRENT: ' + str(self.force_read_current()) + ' uA')
                     time.sleep(0.01)
         except:
             raise
