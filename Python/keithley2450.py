@@ -1,21 +1,30 @@
-#keithley2450.py
-#Controls Keithley 2450 SourceMeter through USB interface
-#Uses Keithley's Test Script Processor, an Lua interpreter
-#Sets to source voltage and measure current
+# keithley2450.py
+# Controls Keithley 2450 SourceMeter through USB interface
+# Uses Keithley's Test Script Processor, an Lua interpreter
+# Sets to source voltage and measure current
+#
+# TO DO: Message boundaries for recv over TCP.
 
-#Python 2.7 only
-#TO DO: Python 3 compatibility
+try:
+    import visa
+except ModuleNotFoundError:
+    import pyvisa as visa
 
-import visa
+try:
+    import thread
+except ModuleNotFoundError:
+    import _thread as thread
+
 import time
-import thread
 import socket
 import traceback
 import atexit
+import ast
 
 class keithley2450:
 
-    def __init__(self, resource = None):
+    def __init__(self, resource = None, listen_port = 65432):
+        self.listen_port = listen_port
         if resource:
             pass
         else: #If resource is not defined, pick the first Keithley 2450
@@ -24,7 +33,7 @@ class keithley2450:
             try:
                 resource =  resource_list[0]
             except IndexError:
-                print 'ERROR: Keithley 2450 not found.'
+                print('ERROR: Keithley 2450 not found.')
                 raise
         self.resource = resource
         self.inst = rm.open_resource(resource)
@@ -45,36 +54,37 @@ class keithley2450:
 
     def listen(self):
         host = '127.0.0.1'
-        port = 65432
+        port = self.listen_port
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.lis_sock = s
         s.bind((host, port))
         s.listen(0)
         while self.on_flag:
             conn, addr = s.accept()
-            listen_string = conn.recv(1024)
+            listen_string = conn.recv(1024).decode()
             if listen_string == 'QUIT':
                 s.close()
             else:
                 try:
                     listen_commands = listen_string.split()
-                    listen_args = '(' + ','.join(listen_commands[1:]) + ')'
+                    listenArgs = [ast.literal_eval(argument) for argument in listen_commands[1:]]
                     if listen_commands[0] in dir(self)[3:]:
                         try:
-                            exec('result = self.' + listen_commands[0] + listen_args)
-                            if result:
-                                conn.sendall(str(result) + '\n')
+                            result = getattr(self, listen_commands[0])(*listenArgs)
+                            if result is not None:
+                                send_string = str(result) + '\n'
+                                conn.sendall(send_string.encode())
                             else:
-                                conn.sendall('NO DATA\n')
-                        except TypeError:
-                            conn.sendall('ERROR: TYPE ERROR\n')
+                                conn.sendall('NO DATA\n'.encode())
+                        except (TypeError, AttributeError):
+                            conn.sendall('ERROR: COMMAND ERROR\n'.encode())
                     else:
-                        conn.sendall('ERROR: COMMAND ERROR\n')
+                        conn.sendall('ERROR: COMMAND ERROR\n'.encode())
                 except Exception:
                     if len(self.error_list) < 21:
                         err = traceback.format_exc()
-                        print 'ERROR in START thread:'
-                        print err
+                        print('ERROR in START thread:')
+                        print(err)
                         self.error_list.append(err)
                     time.sleep(0.5)
 
@@ -88,18 +98,18 @@ class keithley2450:
             except Exception:
                 if len(self.error_list) < 21:
                     err = traceback.format_exc()
-                    print 'ERROR in START thread:'
-                    print err
+                    print('ERROR in START thread:')
+                    print(err)
                     self.error_list.append(err)
             time.sleep(0.5)
 
     def stop(self):
         self.on_flag = 0
         host = '127.0.0.1'
-        port = 65432
+        port = self.listen_port
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((host, port))
-        s.sendall('QUIT')
+        s.sendall('QUIT'.encode())
         s.close()
         self.inst.write('logout')
         self.inst.close()
@@ -152,10 +162,10 @@ class keithley2450:
                 protection_value = protection_levels[sorted(protect_levels_new).index(num)-1]
         if protection_value == 200:
             self.write_to_instrument('smu.source.protect.level = smu.PROTECT_NONE')
-            print 'Set Overprotection to NONE'
+            print('Set Overprotection to NONE')
         else:
             self.write_to_instrument('smu.source.protect.level = smu.PROTECT_' + str(protection_value) + 'V')
-            print 'Set Overprotection to ' + str(protection_value) + 'V'
+            print('Set Overprotection to ' + str(protection_value) + 'V')
 
     def read_from_instrument(self, *messages):
         self.read_flag = 0
